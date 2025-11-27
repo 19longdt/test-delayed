@@ -2,12 +2,15 @@ package local.demo.thread_delay;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,10 +24,12 @@ public class DelayedSymbolCacheAdapter {
     private final DelayWorkerManager quoteWorker;
 
     private final Map<String, String> historicalMap = new ConcurrentHashMap<>();
-    private final Map<String, Deque<String>> historicalMapAll = new ConcurrentHashMap<>();
+//    private final Map<String, Deque<String>> historicalMapAll = new ConcurrentHashMap<>();
+    private final Map<String, ChunkQueue> historicalMapAll = new ConcurrentHashMap<>();
 
     private final Map<String, String> quoteMap = new ConcurrentHashMap<>();
-    private final Map<String, Deque<String>> quoteMapAll = new ConcurrentHashMap<>();
+//    private final Map<String, Deque<String>> quoteMapAll = new ConcurrentHashMap<>();
+    private final Map<String, ChunkQueue> quoteMapAll = new ConcurrentHashMap<>();
 
     private final AtomicInteger totalReceived = new AtomicInteger(0);
     private final AtomicInteger totalProcessed = new AtomicInteger(0);
@@ -46,14 +51,17 @@ public class DelayedSymbolCacheAdapter {
     public void processMain(DelayedEntry entry) {
         long start = System.nanoTime();
         try {
-            Deque<String> values = historicalMapAll.get(entry.getKey());
-            if (values != null && !values.isEmpty()) {
-                String value = values.pollFirst();
-//                historicalMap.computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>()).addFirst(value);
-                historicalMap.put(entry.getKey(), value);
-            }
-            if (values != null && values.isEmpty()) {
-                historicalMapAll.remove(entry.getKey());
+            ChunkQueue queue = historicalMapAll.get(entry.getKey());
+            if (queue != null) {
+                Msg msg = queue.poll();
+                if (msg != null) {
+                    String value = new String(msg.value(), StandardCharsets.UTF_8);
+                    historicalMap.put(entry.getKey(), value);
+                }
+                if (queue.isEmpty()) {
+                    historicalMapAll.remove(entry.getKey());
+                    log.warn("[ZMQ] Empty historical map for key: {}", entry.getKey());
+                }
             }
         } finally {
             recordProcessingTime(start);
@@ -63,28 +71,45 @@ public class DelayedSymbolCacheAdapter {
     public void processQuote(DelayedEntry entry) {
         long start = System.nanoTime();
         try {
-            Deque<String> values = quoteMapAll.get(entry.getKey());
-            if (values != null && !values.isEmpty()) {
-                String value = values.pollFirst();
-                quoteMap.put(entry.getKey(), value);
-            }
-            if (values != null && values.isEmpty()) {
-                quoteMapAll.remove(entry.getKey());
+            ChunkQueue queue = quoteMapAll.get(entry.getKey());
+            if (queue != null) {
+                Msg msg = queue.poll();
+                if (msg != null) {
+                    String value = new String(msg.value(), StandardCharsets.UTF_8);
+                    quoteMap.put(entry.getKey(), value);
+                }
+                if (queue.isEmpty()) {
+                    quoteMapAll.remove(entry.getKey());
+                    log.warn("[ZMQ] Empty quote map for key: {}", entry.getKey());
+                }
             }
         } finally {
+            entry = null;
             recordProcessingTime(start);
         }
     }
 
     public void pushHistory(String key, String value, long delayMs) {
-        historicalMapAll.computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>()).addLast(value);
         totalReceived.incrementAndGet();
+//        historicalMapAll.computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>()).addLast(value);
+//        historicalMap.put(key, value);
+
+
+        ChunkQueue queue = historicalMapAll.computeIfAbsent(key, k -> new ChunkQueue(8192));
+
+        queue.add(value.getBytes(StandardCharsets.UTF_8));
+
         mainWorker.submit(key, delayMs);
     }
 
     public void pushQuote(String key, String value, long delayMs) {
-        quoteMapAll.computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>()).addLast(value);
         totalReceived.incrementAndGet();
+//        quoteMapAll.computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>()).addLast(value);
+//        quoteWorker.submit(key, delayMs);
+        ChunkQueue queue = quoteMapAll.computeIfAbsent(key, k -> new ChunkQueue(8192));
+
+        queue.add(value.getBytes(StandardCharsets.UTF_8));
+
         quoteWorker.submit(key, delayMs);
     }
 
@@ -94,7 +119,7 @@ public class DelayedSymbolCacheAdapter {
         totalProcessingTimeMs.addAndGet(durationMs);
     }
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 10000)
     public void logStats() {
         int received = totalReceived.get();
         int processed = totalProcessed.get();
@@ -109,7 +134,10 @@ public class DelayedSymbolCacheAdapter {
                 received, processed, totalTime, String.format("%.2f", avgTime));
 
         if (historicalMapAll.isEmpty() && quoteMapAll.isEmpty()) {
-            log.info("[Result] historicalMap= {}, quoteMap={}", historicalMap.size(), quoteMap.size());
+            quoteMap.clear();
+            historicalMap.clear();
+            historicalMapAll.clear();
+            quoteMapAll.clear();
         }
     }
 }

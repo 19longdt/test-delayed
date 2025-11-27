@@ -52,8 +52,10 @@ public class DelayWorkerManager {
                 } else if (delayQueue.isEmpty() &&
                         (System.currentTimeMillis() - lastActive > idleTimeoutMs)) {
                     log.info("[DelayQueue] {} idle, close", name);
+//                    System.gc();
                     break;
                 }
+                entry = null;
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

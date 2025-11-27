@@ -15,7 +15,7 @@ public class ZmqPublisherApplication {
     @Bean
     public CommandLineRunner runPublisher() {
         return args -> {
-            ZmqMessagePublisher pub = new ZmqMessagePublisher("tcp://*:5555", 500_000);
+            ZmqMessagePublisher pub = new ZmqMessagePublisher("tcp://*:5555", 2_000_000);
             pub.start();
             pub.join(); // chờ publisher chạy xong
         };

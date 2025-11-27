@@ -2,6 +2,8 @@ package local.demo.thread_delay;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import local.demo.thread_delay.dynamicRingBuffer.DynamicDelayedSymbolCacheAdapter;
+import local.demo.thread_delay.ringBuffer.FixDelayedSymbolCacheAdapter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.zeromq.ZContext;
@@ -12,13 +14,13 @@ import org.zeromq.ZMsg;
 @Component
 public class ZmqMessageSubscriber {
 
-    private final DelayedSymbolCacheAdapter cacheAdapter;
+    private final FixDelayedSymbolCacheAdapter cacheAdapter;
     private ZContext context;
     private ZMQ.Socket subscriber;
     private Thread thread;
     private volatile boolean running = true;
 
-    public ZmqMessageSubscriber(DelayedSymbolCacheAdapter cacheAdapter) {
+    public ZmqMessageSubscriber(FixDelayedSymbolCacheAdapter cacheAdapter) {
         this.cacheAdapter = cacheAdapter;
     }
 
@@ -46,8 +48,8 @@ public class ZmqMessageSubscriber {
 //                    log.info("[ZMQ] Received topic={} symbol={} body={}", topic, symbol, body);
 
                     switch (topic) {
-                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body, 20000);
-                        case "history" -> cacheAdapter.pushHistory(symbol, body, 20000);
+                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body, 60_000);
+                        case "history" -> cacheAdapter.pushHistory(symbol, body, 60_000);
                         default -> log.warn("[ZMQ] Unknown topic: {}", topic);
                     }
 
