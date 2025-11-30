@@ -15,15 +15,16 @@ public class FixedRingBuffer<T> {
         this.mask = sizePowerOfTwo - 1;
     }
 
-    public void offer(byte[] value) {
+    public boolean offer(byte[] value) {
         long t = tail;
         long h = head;
         if (t - h == buffer.length) {
             log.warn("Full buffer size: " + buffer.length + " head: " + head + " tail: " + tail);
-            return; // full
+            return false; // full
         }
         buffer[(int)(t & mask)] = value;
         tail = t + 1;
+        return true;
     }
 
     public byte[] poll() {

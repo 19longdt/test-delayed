@@ -1,4 +1,4 @@
-package local.demo.thread_delay;
+package local.demo.thread_delay.monitor;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.log4j.Log4j2;
@@ -33,7 +33,7 @@ public class GCDebugHelper {
     /**
      * Ghi log GC & heap mỗi 10 giây.
      */
-    @Scheduled(fixedRate = 10_000)
+//    @Scheduled(fixedRate = 10_000)
     public void logMemoryAndGC() {
 //        byte[][] filler = new byte[20][1024 * 1024]; // 20 MB allocation
 //        filler = null;
@@ -63,7 +63,7 @@ public class GCDebugHelper {
     /**
      * Gọi thử System.gc() thủ công và ghi nhận phản ứng.
      */
-    @Scheduled(fixedRate = 10_000)
+//    @Scheduled(fixedRate = 10_000)
     public void forceGC() {
         log.warn("[GC Monitor] Manual GC triggered!");
         long before = memoryBean.getHeapMemoryUsage().getUsed() / 1024 / 1024;
@@ -71,5 +71,19 @@ public class GCDebugHelper {
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
         long after = memoryBean.getHeapMemoryUsage().getUsed() / 1024 / 1024;
         log.warn("[GC Monitor] Manual GC done. Heap used: {}MB → {}MB", before, after);
+    }
+
+    @Scheduled(fixedDelay = 60000)
+    public void checkWorkers() {
+        int running = WorkerMonitor.ACTIVE_WORKERS.get();
+
+        if (running == 0) {
+            long now = System.currentTimeMillis();
+            if (now - lastGcTime > 10_000) { // tránh spam nếu mọi thứ idle lâu
+                log.info("[GC] No active workers → triggering System.gc()");
+                System.gc();
+                lastGcTime = now;
+            }
+        }
     }
 }

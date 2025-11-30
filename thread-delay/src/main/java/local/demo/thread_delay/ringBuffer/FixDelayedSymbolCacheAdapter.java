@@ -1,17 +1,18 @@
 package local.demo.thread_delay.ringBuffer;
 
 import jakarta.annotation.PostConstruct;
-import local.demo.thread_delay.DelayWorkerManager;
+import local.demo.thread_delay.DelayWorkersRegistry;
 import local.demo.thread_delay.DelayedEntry;
-import local.demo.thread_delay.MemoryGuardian;
+import local.demo.thread_delay.monitor.MemoryGuardian;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+
 import java.nio.charset.StandardCharsets;
 import java.util.Deque;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,8 +22,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class FixDelayedSymbolCacheAdapter {
 
-    private final DelayWorkerManager mainWorker;
-    private final DelayWorkerManager quoteWorker;
+    private final DelayWorkersRegistry historyRegistry;
+    private final DelayWorkersRegistry quoteRegistry;
 
     private final Map<String, Deque<String>> historicalMap = new ConcurrentHashMap<>();
     private final Map<String, FixedRingBuffer<byte[]>> historicalRing = new ConcurrentHashMap<>();
@@ -35,18 +36,26 @@ public class FixDelayedSymbolCacheAdapter {
     private final AtomicLong totalProcessingTimeMs = new AtomicLong(0);
 
     private final MemoryGuardian guardian;
-
-    private static final int RING_SIZE = 10_000_000;
+    private static final int RING_SIZE = 10_000;
 
     public FixDelayedSymbolCacheAdapter(MemoryGuardian guardian) {
         this.guardian = guardian;
-        this.mainWorker = new DelayWorkerManager("MainWorker", 60_000, this::processMain);
-        this.quoteWorker = new DelayWorkerManager("QuoteWorker", 60_000, this::processQuote);
+
+        // mỗi symbol 1 worker riêng
+        this.historyRegistry = new DelayWorkersRegistry(
+                60_000,
+                this::processMain
+        );
+
+        this.quoteRegistry = new DelayWorkersRegistry(
+                60_000,
+                this::processQuote
+        );
     }
 
     @PostConstruct
     public void register() {
-        guardian.registerManagers(List.of(mainWorker, quoteWorker));
+        guardian.registerManagers(List.of(historyRegistry, quoteRegistry));
     }
 
     // -------------------- PROCESS MAIN ----------------------------
@@ -58,8 +67,9 @@ public class FixDelayedSymbolCacheAdapter {
             if (rb != null) {
                 byte[] val = rb.poll();
                 if (val != null) {
-//                    historicalMap.put(entry.getKey(), new String(val));
-                    historicalMap.computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>()).addLast(new String(val));
+                    historicalMap
+                            .computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>())
+                            .addLast(new String(val));
                 }
                 if (rb.isEmpty()) {
                     historicalRing.remove(entry.getKey());
@@ -99,7 +109,7 @@ public class FixDelayedSymbolCacheAdapter {
                 .offer(raw);
 
         totalReceived.incrementAndGet();
-        mainWorker.submit(key, delayMs);
+        historyRegistry.submit(key, delayMs);  // <-- worker riêng cho từng symbol
     }
 
     public void pushQuote(String key, String value, long delayMs) {
@@ -109,7 +119,7 @@ public class FixDelayedSymbolCacheAdapter {
                 .offer(raw);
 
         totalReceived.incrementAndGet();
-        quoteWorker.submit(key, delayMs);
+        quoteRegistry.submit(key, delayMs);   // <-- worker riêng cho từng symbol
     }
 
     // -------------------- STATS ----------------------------
@@ -134,9 +144,9 @@ public class FixDelayedSymbolCacheAdapter {
         log.info("📊 Stats: received={}, processed={}, totalTime={} ms, avgTime={} ms/msg",
                 received, processed, totalTime, String.format("%.2f", avgTime));
 
-        // cleanup khi 2 buffer trống
         if (historicalRing.isEmpty() && quoteRing.isEmpty()) {
-            log.info("[Result] historicalMap={}, historicalMapValues {}, quoteMap={}", historicalMap.size(), historicalMap.size(), quoteMap.size());
+            log.info("[Result] historicalMap={}, historicalMapValues {}, quoteMap={}",
+                    historicalMap.size(), historicalMap.size(), quoteMap.size());
         }
     }
 }

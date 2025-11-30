@@ -1,29 +1,24 @@
-package local.demo.thread_delay;
+package local.demo.thread_snapshot;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import local.demo.thread_delay.ringBuffer.FixDelayedSymbolCacheAdapter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMsg;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 @Slf4j
 @Component
 public class ZmqMessageSubscriber {
 
-    private final FixDelayedSymbolCacheAdapter cacheAdapter;
+    private final SymbolCacheAdapter cacheAdapter;
     private ZContext context;
     private ZMQ.Socket subscriber;
     private Thread thread;
     private volatile boolean running = true;
-    private final AtomicInteger totalReceived = new AtomicInteger(0);
 
-    public ZmqMessageSubscriber(FixDelayedSymbolCacheAdapter cacheAdapter) {
+    public ZmqMessageSubscriber(SymbolCacheAdapter cacheAdapter) {
         this.cacheAdapter = cacheAdapter;
     }
 
@@ -44,7 +39,6 @@ public class ZmqMessageSubscriber {
             ZMsg msg = ZMsg.recvMsg(subscriber, ZMQ.DONTWAIT);
             if (msg != null) {
                 try {
-                    totalReceived.incrementAndGet();
                     String topic = msg.popString();
                     String symbol = msg.popString();
                     String body = msg.popString();
@@ -52,8 +46,8 @@ public class ZmqMessageSubscriber {
 //                    log.info("[ZMQ] Received topic={} symbol={} body={}", topic, symbol, body);
 
                     switch (topic) {
-                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body, 60_000);
-                        case "history" -> cacheAdapter.pushHistory(symbol, body, 60_000);
+                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body);
+                        case "history" -> cacheAdapter.pushHistory(symbol, body);
                         default -> log.warn("[ZMQ] Unknown topic: {}", topic);
                     }
 
@@ -79,11 +73,5 @@ public class ZmqMessageSubscriber {
         if (subscriber != null) subscriber.close();
         if (context != null) context.close();
         log.info("[ZMQ] Subscriber stopped");
-    }
-
-    @Scheduled(fixedDelay = 60000)
-    public void logStats() {
-        int received = totalReceived.get();
-        log.info("Stats: received={}", received);
     }
 }

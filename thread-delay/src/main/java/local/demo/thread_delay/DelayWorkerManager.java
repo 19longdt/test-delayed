@@ -1,31 +1,32 @@
 package local.demo.thread_delay;
 
-import lombok.extern.log4j.Log4j2;
+import local.demo.thread_delay.monitor.WorkerMonitor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-@Log4j2
+@Slf4j
 public class DelayWorkerManager {
-    private final String name;
-    private final DelayQueue<DelayedEntry> delayQueue = new DelayQueue<>();
+
+    private final String symbol;
+    private final DelayQueue<DelayedEntry> queue = new DelayQueue<>();
     private final AtomicReference<Thread> worker = new AtomicReference<>();
     private final long idleTimeoutMs;
     private final Consumer<DelayedEntry> handler;
 
-    public DelayWorkerManager(String name, long idleTimeoutMs, Consumer<DelayedEntry> handler) {
-        this.name = name;
+    public DelayWorkerManager(String symbol,
+                              long idleTimeoutMs,
+                              Consumer<DelayedEntry> handler) {
+        this.symbol = symbol;
         this.idleTimeoutMs = idleTimeoutMs;
         this.handler = handler;
     }
 
-    public void submit(String key, long delayMs) {
-        delayQueue.offer(new DelayedEntry(key, delayMs));
+    public void submit(long delayMs) {
+        queue.offer(new DelayedEntry(symbol, delayMs));
         startWorkerIfNeeded();
     }
 
@@ -33,40 +34,41 @@ public class DelayWorkerManager {
         Thread existing = worker.get();
         if (existing != null && existing.isAlive()) return;
 
-        Thread newWorker = new Thread(this::processLoop, name);
-        newWorker.setDaemon(true);
-        if (worker.compareAndSet(existing, newWorker)) {
-            newWorker.start();
+        Thread vt = Thread.ofVirtual().unstarted(this::processLoop);
+
+        if (worker.compareAndSet(existing, vt)) {
+            WorkerMonitor.ACTIVE_WORKERS.incrementAndGet();
+            vt.start();
+            log.info("[{}] Virtual worker started", symbol);
         }
     }
 
     private void processLoop() {
         try {
             long lastActive = System.currentTimeMillis();
-            while (!Thread.currentThread().isInterrupted()) {
-                DelayedEntry entry = delayQueue.poll(1, TimeUnit.SECONDS);
+
+            while (true) {
+                DelayedEntry entry = queue.poll(1, TimeUnit.SECONDS);
 
                 if (entry != null) {
                     lastActive = System.currentTimeMillis();
-                    handler.accept(entry); // callback xử lý logic riêng
-                } else if (delayQueue.isEmpty() &&
-                        (System.currentTimeMillis() - lastActive > idleTimeoutMs)) {
-                    log.info("[DelayQueue] {} idle, close", name);
-                    System.gc();
+                    handler.accept(entry);
+                } else if (queue.isEmpty() &&
+                        System.currentTimeMillis() - lastActive > idleTimeoutMs) {
+                    WorkerMonitor.ACTIVE_WORKERS.decrementAndGet();
+                    log.info("[{}] idle timeout, worker shutting down", symbol);
                     break;
                 }
-                entry = null;
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } catch (InterruptedException ignored) {
         } finally {
             worker.set(null);
-            System.out.printf("[%s] worker stopped%n", name);
+            System.out.printf("[%s] worker stopped%n", symbol);
         }
     }
 
     public boolean isRunning() {
-        Thread t = worker.get();
-        return t != null && t.isAlive();
+        Thread w = worker.get();
+        return w != null && w.isAlive();
     }
 }
