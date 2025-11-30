@@ -36,12 +36,12 @@ public class FixDelayedSymbolCacheAdapter {
 
     private final MemoryGuardian guardian;
 
-    private static final int RING_SIZE = 1_000_000;  // power of 2
+    private static final int RING_SIZE = 10_000_000;
 
     public FixDelayedSymbolCacheAdapter(MemoryGuardian guardian) {
         this.guardian = guardian;
-        this.mainWorker = new DelayWorkerManager("MainWorker", 5000, this::processMain);
-        this.quoteWorker = new DelayWorkerManager("QuoteWorker", 5000, this::processQuote);
+        this.mainWorker = new DelayWorkerManager("MainWorker", 60_000, this::processMain);
+        this.quoteWorker = new DelayWorkerManager("QuoteWorker", 60_000, this::processQuote);
     }
 
     @PostConstruct

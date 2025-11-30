@@ -118,7 +118,7 @@ public class DynamicDelayedSymbolCacheAdapter {
         totalProcessingTimeMs.addAndGet(durationMs);
     }
 
-    @Scheduled(fixedDelay = 10000)
+//    @Scheduled(fixedDelay = 10000)
     public void logStats() {
         int received = totalReceived.get();
         int processed = totalProcessed.get();

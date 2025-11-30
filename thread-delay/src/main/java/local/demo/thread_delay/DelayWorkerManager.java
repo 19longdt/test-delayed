@@ -52,7 +52,7 @@ public class DelayWorkerManager {
                 } else if (delayQueue.isEmpty() &&
                         (System.currentTimeMillis() - lastActive > idleTimeoutMs)) {
                     log.info("[DelayQueue] {} idle, close", name);
-//                    System.gc();
+                    System.gc();
                     break;
                 }
                 entry = null;

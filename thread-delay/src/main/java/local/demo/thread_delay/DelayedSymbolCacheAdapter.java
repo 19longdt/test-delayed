@@ -34,8 +34,8 @@ public class DelayedSymbolCacheAdapter {
 
     public DelayedSymbolCacheAdapter(MemoryGuardian guardian) {
         this.guardian = guardian;
-        this.mainWorker = new DelayWorkerManager("MainWorker", 5000, this::processMain);
-        this.quoteWorker = new DelayWorkerManager("QuoteWorker", 5000, this::processQuote);
+        this.mainWorker = new DelayWorkerManager("MainWorker", 60_000, this::processMain);
+        this.quoteWorker = new DelayWorkerManager("QuoteWorker", 60_000, this::processQuote);
     }
 
     @PostConstruct
@@ -94,7 +94,7 @@ public class DelayedSymbolCacheAdapter {
         totalProcessingTimeMs.addAndGet(durationMs);
     }
 
-    @Scheduled(fixedDelay = 60000)
+//    @Scheduled(fixedDelay = 60000)
     public void logStats() {
         int received = totalReceived.get();
         int processed = totalProcessed.get();

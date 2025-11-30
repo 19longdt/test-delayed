@@ -63,6 +63,7 @@ public class GCDebugHelper {
     /**
      * Gọi thử System.gc() thủ công và ghi nhận phản ứng.
      */
+    @Scheduled(fixedRate = 10_000)
     public void forceGC() {
         log.warn("[GC Monitor] Manual GC triggered!");
         long before = memoryBean.getHeapMemoryUsage().getUsed() / 1024 / 1024;
