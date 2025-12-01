@@ -2,6 +2,7 @@ package local.demo.thread_delay;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import local.demo.thread_delay.monitor.WorkerMonitor;
 import local.demo.thread_delay.ringBuffer.FixDelayedSymbolCacheAdapter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -53,9 +54,12 @@ public class ZmqMessageSubscriber {
 
                     switch (topic) {
                         case "quoteAll" -> {
-//                            cacheAdapter.pushQuote(symbol, body, 60_000);
+                            cacheAdapter.pushQuote(symbol, body, 60_000);
                         }
                         case "history" -> {
+                            if (symbol.equals("SYM1")) {
+                                WorkerMonitor.RECEIVE_SYM1.incrementAndGet();
+                            }
                             cacheAdapter.pushHistory(symbol, body, 60_000);
                         }
                         default -> log.warn("[ZMQ] Unknown topic: {}", topic);

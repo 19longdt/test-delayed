@@ -73,9 +73,12 @@ public class GCDebugHelper {
         log.warn("[GC Monitor] Manual GC done. Heap used: {}MB → {}MB", before, after);
     }
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 10000)
     public void checkWorkers() {
         int running = WorkerMonitor.ACTIVE_WORKERS.get();
+        log.info("[GCDebugHelper] RECEIVE_SYM1 : {}", WorkerMonitor.RECEIVE_SYM1.get());
+        log.info("[GCDebugHelper] HANDLE_SYM1 : {}", WorkerMonitor.HANDLE_SYM1.get());
+        log.info("[GCDebugHelper] HANDLED_SYM1 : {}", WorkerMonitor.HANDLED_SYM1.get());
 
         if (running == 0) {
             long now = System.currentTimeMillis();

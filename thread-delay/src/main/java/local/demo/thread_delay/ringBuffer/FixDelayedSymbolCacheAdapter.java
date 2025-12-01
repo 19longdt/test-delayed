@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import local.demo.thread_delay.DelayWorkersRegistry;
 import local.demo.thread_delay.DelayedEntry;
 import local.demo.thread_delay.monitor.MemoryGuardian;
+import local.demo.thread_delay.monitor.WorkerMonitor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -60,13 +61,14 @@ public class FixDelayedSymbolCacheAdapter {
             if (rb != null) {
                 byte[] val = rb.pollFirst();
                 if (val != null) {
+                    if (entry.getKey().equals("SYM1")) {
+                        WorkerMonitor.HANDLED_SYM1.incrementAndGet();
+                    }
                     historicalMap
                             .computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>())
                             .addLast(new String(val));
                 } else {
-                    if (entry.getKey().equals("SYM1")) {
                         log.warn("process main map value null {}", entry.getKey());
-                    }
                 }
                 if (rb.isEmpty()) {
                     historicalRing.remove(entry.getKey());
