@@ -67,13 +67,20 @@ public class FixDelayedSymbolCacheAdapter {
             if (rb != null) {
                 byte[] val = rb.poll();
                 if (val != null) {
+                    if (entry.getKey().equals("SYM1")) {
+                        log.info("process main map " + new String(val));
+                    }
                     historicalMap
                             .computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>())
                             .addLast(new String(val));
+                } else {
+                    log.warn("[ZMQ] value null {}");
                 }
                 if (rb.isEmpty()) {
                     historicalRing.remove(entry.getKey());
                 }
+            } else {
+                log.warn("[ZMQ] No historical ring found for {}", entry.getKey());
             }
         } finally {
             recordProcessingTime(start);
@@ -110,6 +117,9 @@ public class FixDelayedSymbolCacheAdapter {
 
         totalReceived.incrementAndGet();
         historyRegistry.submit(key, delayMs);  // <-- worker riêng cho từng symbol
+//        if (key.equals("SYM1")) {
+//            log.info("pushHistory " + value);
+//        }
     }
 
     public void pushQuote(String key, String value, long delayMs) {

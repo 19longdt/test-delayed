@@ -44,10 +44,21 @@ public class ZmqMessageSubscriber {
                     String body = msg.popString();
 
 //                    log.info("[ZMQ] Received topic={} symbol={} body={}", topic, symbol, body);
+                    if (symbol.equals("SYM1")) {
+                        log.info("GET " + body);
+                    }
 
                     switch (topic) {
-                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body);
-                        case "history" -> cacheAdapter.pushHistory(symbol, body);
+                        case "quoteAll" -> {
+
+//                            cacheAdapter.pushQuote(symbol, body);
+                        }
+                        case "history" -> {
+                            if (symbol.equals("SYM1")) {
+                                log.info("Switch " + body);
+                            }
+                            cacheAdapter.pushHistory(symbol, body);
+                        }
                         default -> log.warn("[ZMQ] Unknown topic: {}", topic);
                     }
 

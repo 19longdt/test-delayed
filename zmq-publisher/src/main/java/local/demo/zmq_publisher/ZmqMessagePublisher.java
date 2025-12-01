@@ -6,7 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -63,34 +65,52 @@ public class ZmqMessagePublisher implements Runnable {
             long start = System.currentTimeMillis();
             int sent = 0;
 
+            // NEW: Sequence per symbol
+            Map<String, Long> symbolSeq = new ConcurrentHashMap<>();
+
             while (running.get() && sent < totalMessages) {
 
-                // ✅ Gửi 100 msg/lần
                 for (int i = 0; i < 100 && sent < totalMessages; i++) {
 
-                    String topic = (i < 80) ? "history" : "quoteAll"; // 90/10 ratio
-                    String symbol = "SYM" + rand.nextInt(1000);
-                    String message = i + "______{\"web-app\":{\"servlet\":[{\"servlet-name\":\"cofaxCDS\",\"servlet-class\":\"org.cofax.cds.CDSServlet\",\"init-param\":{\"configGlossary:installationAt\":\"Philadelphia, PA\",\"configGlossary:adminEmail\":\"ksm@pobox.com\",\"configGlossary:poweredBy\":\"Cofax\",\"configGlossary:poweredByIcon\":\"/images/cofax.gif\",\"configGlossary:staticPath\":\"/content/static\",\"templateProcessorClass\":\"org.cofax.WysiwygTemplate\",\"templateLoaderClass\":\"org.cofax.FilesTemplateLoader\",\"templatePath\":\"templates\",\"templateOverridePath\":\"\",\"defaultListTemplate\":\"listTemplate.htm\",\"defaultFileTemplate\":\"articleTemplate.htm\",\"useJSP\":false,\"jspListTemplate\":\"listTemplate.jsp\",\"jspFileTemplate\":\"articleTemplate.jsp\",\"cachePackageTagsTrack\":200,\"cachePackageTagsStore\":200,\"cachePackageTagsRefresh\":60,\"cacheTemplatesTrack\":100,\"cacheTemplatesStore\":50,\"cacheTemplatesRefresh\":15,\"cachePagesTrack\":200,\"cachePagesStore\":100,\"cachePagesRefresh\":10,\"cachePagesDirtyRead\":10,\"searchEngineListTemplate\":\"forSearchEnginesList.htm\",\"searchEngineFileTemplate\":\"forSearchEngines.htm\",\"searchEngineRobotsDb\":\"WEB-INF/robots.db\",\"useDataStore\":true,\"dataStoreClass\":\"org.cofax.SqlDataStore\",\"redirectionClass\":\"org.cofax.SqlRedirection\",\"dataStoreName\":\"cofax\",\"dataStoreDriver\":\"com.microsoft.jdbc.sqlserver.SQLServerDriver\",\"dataStoreUrl\":\"jdbc:microsoft:sqlserver://LOCALHOST:1433;DatabaseName=goon\",\"dataStoreUser\":\"sa\",\"dataStorePassword\":\"dataStoreTestQuery\",\"dataStoreTestQuery\":\"SET NOCOUNT ON;select test='test';\",\"dataStoreLogFile\":\"/usr/local/tomcat/logs/datastore.log\",\"dataStoreInitConns\":10,\"dataStoreMaxConns\":100,\"dataStoreConnUsageLimit\":100,\"dataStoreLogLevel\":\"debug\",\"maxUrlLength\":500}},{\"servlet-name\":\"cofaxEmail\",\"servlet-class\":\"org.cofax.cds.EmailServlet\",\"init-param\":{\"mailHost\":\"mail1\",\"mailHostOverride\":\"mail2\"}},{\"servlet-name\":\"cofaxAdmin\",\"servlet-class\":\"org.cofax.cds.AdminServalet\"},{\"servlet-name\":\"fileServlet\",\"servlet-class\":\"org.cofax.cds.FileServlet\"},{\"servlet-name\":\"cofaxTools\",\"servlet-class\":\"org.cofax.cms.CofaxToolsServlet\",\"init-param\":{\"templatePath\":\"toolstemplates/\",\"log\":1,\"logLocation\":\"/usr/local/tomcat/logs/CofaxTools.log\",\"logMaxSize\":\"\",\"dataLog\":1,\"dataLogLocation\":\"/usr/local/tomcat/logs/dataLog.log\",\"dataLogMaxSize\":\"\",\"removePageCache\":\"/content/admin/remove?cache=pages&id=\",\"removeTemplateCache\":\"/content/admin/remove?cache=templates&id=\",\"fileTransferFolder\":\"/usr/local/tomcat/webapps/content/fileTransferFolder\",\"lookInContext\":1,\"adminGroupID\":4,\"betaServer\":true}}],\"servlet-mapping\":{\"cofaxCDS\":\"/\",\"cofaxEmail\":\"/cofaxutil/aemail/*\",\"cofaxAdmin\":\"/admin/*\",\"fileServlet\":\"/static/*\",\"cofaxTools\":\"/tools/*\"},\"taglib\":{\"taglib-uri\":\"cofax.tld\",\"taglib-location\":\"/WEB-INF/tlds/cofax.tld\"}}}";
+                    String topic = "history";
 
-                    // Gửi 3 frame: topic, symbol, message
+                    // Random symbol
+                    String symbol = "SYM" + rand.nextInt(20);
+
+                    // --- symbol sequence (đảm bảo tuần tự theo symbol) ---
+                    long sSeq = symbolSeq.getOrDefault(symbol, 0L);
+                    symbolSeq.put(symbol, sSeq + 1);
+
+                    // Message payload
+                    String body = " | SYM=" + symbol + " | SYM_SEQ=" + sSeq +
+                            " | MSG=" + i +
+                            " | PAYLOAD={...big_json...}";
+                    if (symbol.equals("SYM1")) {
+                        log.info(body);
+                    }
+
+                    // ZMQ multipart
                     publisher.sendMore(topic);
                     publisher.sendMore(symbol);
-                    publisher.send(message);
+                    publisher.send(body);
 
                     sent++;
                 }
 
-                Thread.sleep(1);
+                Thread.sleep(5);
 
-                if (sent % 10000 == 0) {
-                    log.info("[ZMQ] Progress: sent {} messages so far...", sent);
+                if (sent % 5000 == 0) {
+                    log.info("[ZMQ] Progress: sent {} messages...", sent);
                 }
             }
 
             long elapsed = System.currentTimeMillis() - start;
             double rate = (sent * 1000.0) / elapsed;
+
             log.info("[ZMQ] Finished sending {} messages in {}s (~{} msg/s)",
-                    sent, String.format("%.2f", elapsed / 1000.0), String.format("%.0f", rate));
+                    sent,
+                    String.format("%.2f", elapsed / 1000.0),
+                    String.format("%.0f", rate));
 
         } catch (Exception e) {
             log.error("[ZMQ] Error while publishing", e);
@@ -98,4 +118,5 @@ public class ZmqMessagePublisher implements Runnable {
             running.set(false);
         }
     }
+
 }

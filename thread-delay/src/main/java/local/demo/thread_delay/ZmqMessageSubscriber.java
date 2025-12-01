@@ -10,6 +10,7 @@ import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMsg;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -41,10 +42,9 @@ public class ZmqMessageSubscriber {
 
     private void listenLoop() {
         while (running && !Thread.currentThread().isInterrupted()) {
-            ZMsg msg = ZMsg.recvMsg(subscriber, ZMQ.DONTWAIT);
+            ZMsg msg = ZMsg.recvMsg(subscriber);
             if (msg != null) {
                 try {
-                    totalReceived.incrementAndGet();
                     String topic = msg.popString();
                     String symbol = msg.popString();
                     String body = msg.popString();
@@ -52,11 +52,16 @@ public class ZmqMessageSubscriber {
 //                    log.info("[ZMQ] Received topic={} symbol={} body={}", topic, symbol, body);
 
                     switch (topic) {
-                        case "quoteAll" -> cacheAdapter.pushQuote(symbol, body, 60_000);
-                        case "history" -> cacheAdapter.pushHistory(symbol, body, 60_000);
+                        case "quoteAll" -> {
+//                            cacheAdapter.pushQuote(symbol, body, 60_000);
+                        }
+                        case "history" -> {
+                            cacheAdapter.pushHistory(symbol, body, 60_000);
+                        }
                         default -> log.warn("[ZMQ] Unknown topic: {}", topic);
                     }
 
+                    totalReceived.incrementAndGet();
                 } catch (Exception e) {
                     log.error("[ZMQ] Error handling message", e);
                 } finally {
