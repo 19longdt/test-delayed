@@ -72,22 +72,23 @@ public class ZmqMessagePublisher implements Runnable {
 
                 for (int i = 0; i < 100 && sent < totalMessages; i++) {
 
-                    String topic = "history";
+                    String topic = (i < 80) ? "history" : "quoteAll";
 
                     // Random symbol
-                    String symbol = "SYM" + rand.nextInt(20);
+                    String symbol = "SYM" + rand.nextInt(1000);
 
                     // --- symbol sequence (đảm bảo tuần tự theo symbol) ---
                     long sSeq = symbolSeq.getOrDefault(symbol, 0L);
                     symbolSeq.put(symbol, sSeq + 1);
 
                     // Message payload
-                    String body = " | SYM=" + symbol + " | SYM_SEQ=" + sSeq +
+                    String body = " | SYM=" + symbol +
+                            " | SYM_SEQ=" + sSeq +
                             " | MSG=" + i +
                             " | PAYLOAD={...big_json...}";
-                    if (symbol.equals("SYM1")) {
-                        log.info(body);
-                    }
+//                    if (symbol.equals("SYM1")) {
+//                        log.info(body);
+//                    }
 
                     // ZMQ multipart
                     publisher.sendMore(topic);
@@ -97,7 +98,7 @@ public class ZmqMessagePublisher implements Runnable {
                     sent++;
                 }
 
-                Thread.sleep(5);
+                Thread.sleep(1);
 
                 if (sent % 5000 == 0) {
                     log.info("[ZMQ] Progress: sent {} messages...", sent);

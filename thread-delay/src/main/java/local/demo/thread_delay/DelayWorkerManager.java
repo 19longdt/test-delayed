@@ -53,9 +53,9 @@ public class DelayWorkerManager {
                 if (entry != null) {
                     lastActive = System.currentTimeMillis();
                     handler.accept(entry);
-                    if (entry.getKey().equals("SYM1")) {
-                        log.info("poll ");
-                    }
+//                    if (entry.getKey().equals("SYM1")) {
+//                        log.info("poll ");
+//                    }
                 } else if (queue.isEmpty() &&
                         System.currentTimeMillis() - lastActive > idleTimeoutMs) {
                     WorkerMonitor.ACTIVE_WORKERS.decrementAndGet();

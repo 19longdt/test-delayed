@@ -15,19 +15,18 @@ public class FixedRingBuffer<T> {
         this.mask = sizePowerOfTwo - 1;
     }
 
-    public boolean offer(byte[] value) {
+    public synchronized void offer(byte[] value) {
         long t = tail;
         long h = head;
         if (t - h == buffer.length) {
             log.warn("Full buffer size: " + buffer.length + " head: " + head + " tail: " + tail);
-            return false; // full
+            return; // full
         }
         buffer[(int)(t & mask)] = value;
         tail = t + 1;
-        return true;
     }
 
-    public byte[] poll() {
+    public synchronized byte[] poll() {
         long h = head;
         if (h == tail) return null;
         int idx = (int)(h & mask);

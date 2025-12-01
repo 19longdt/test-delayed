@@ -26,10 +26,10 @@ public class FixDelayedSymbolCacheAdapter {
     private final DelayWorkersRegistry quoteRegistry;
 
     private final Map<String, Deque<String>> historicalMap = new ConcurrentHashMap<>();
-    private final Map<String, FixedRingBuffer<byte[]>> historicalRing = new ConcurrentHashMap<>();
+    private final Map<String, Deque<byte[]>> historicalRing = new ConcurrentHashMap<>();
 
     private final Map<String, String> quoteMap = new ConcurrentHashMap<>();
-    private final Map<String, FixedRingBuffer<byte[]>> quoteRing = new ConcurrentHashMap<>();
+    private final Map<String, Deque<byte[]>> quoteRing = new ConcurrentHashMap<>();
 
     private final AtomicInteger totalReceived = new AtomicInteger(0);
     private final AtomicInteger totalProcessed = new AtomicInteger(0);
@@ -42,15 +42,8 @@ public class FixDelayedSymbolCacheAdapter {
         this.guardian = guardian;
 
         // mỗi symbol 1 worker riêng
-        this.historyRegistry = new DelayWorkersRegistry(
-                60_000,
-                this::processMain
-        );
-
-        this.quoteRegistry = new DelayWorkersRegistry(
-                60_000,
-                this::processQuote
-        );
+        this.historyRegistry = new DelayWorkersRegistry(30_000, this::processMain);
+        this.quoteRegistry = new DelayWorkersRegistry(30_000, this::processQuote);
     }
 
     @PostConstruct
@@ -63,18 +56,17 @@ public class FixDelayedSymbolCacheAdapter {
     public void processMain(DelayedEntry entry) {
         long start = System.nanoTime();
         try {
-            FixedRingBuffer<byte[]> rb = historicalRing.get(entry.getKey());
+            Deque<byte[]> rb = historicalRing.get(entry.getKey());
             if (rb != null) {
-                byte[] val = rb.poll();
+                byte[] val = rb.pollFirst();
                 if (val != null) {
-                    if (entry.getKey().equals("SYM1")) {
-                        log.info("process main map " + new String(val));
-                    }
                     historicalMap
                             .computeIfAbsent(entry.getKey(), k -> new ConcurrentLinkedDeque<>())
                             .addLast(new String(val));
                 } else {
-                    log.warn("[ZMQ] value null {}");
+                    if (entry.getKey().equals("SYM1")) {
+                        log.warn("process main map value null {}", entry.getKey());
+                    }
                 }
                 if (rb.isEmpty()) {
                     historicalRing.remove(entry.getKey());
@@ -92,9 +84,9 @@ public class FixDelayedSymbolCacheAdapter {
     public void processQuote(DelayedEntry entry) {
         long start = System.nanoTime();
         try {
-            FixedRingBuffer<byte[]> rb = quoteRing.get(entry.getKey());
+            Deque<byte[]> rb = quoteRing.get(entry.getKey());
             if (rb != null) {
-                byte[] val = rb.poll();
+                byte[] val = rb.pollFirst();
                 if (val != null) {
                     quoteMap.put(entry.getKey(), new String(val));
                 }
@@ -112,8 +104,8 @@ public class FixDelayedSymbolCacheAdapter {
     public void pushHistory(String key, String value, long delayMs) {
         byte[] raw = value.getBytes(StandardCharsets.UTF_8);
         historicalRing
-                .computeIfAbsent(key, k -> new FixedRingBuffer<>(RING_SIZE))
-                .offer(raw);
+                .computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>())
+                .addLast(raw);
 
         totalReceived.incrementAndGet();
         historyRegistry.submit(key, delayMs);  // <-- worker riêng cho từng symbol
@@ -125,8 +117,8 @@ public class FixDelayedSymbolCacheAdapter {
     public void pushQuote(String key, String value, long delayMs) {
         byte[] raw = value.getBytes(StandardCharsets.UTF_8);
         quoteRing
-                .computeIfAbsent(key, k -> new FixedRingBuffer<>(RING_SIZE))
-                .offer(raw);
+                .computeIfAbsent(key, k -> new ConcurrentLinkedDeque<>())
+                .addLast(raw);
 
         totalReceived.incrementAndGet();
         quoteRegistry.submit(key, delayMs);   // <-- worker riêng cho từng symbol
@@ -140,7 +132,7 @@ public class FixDelayedSymbolCacheAdapter {
         totalProcessingTimeMs.addAndGet(durationMs);
     }
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 30000)
     public void logStats() {
         int received = totalReceived.get();
         int processed = totalProcessed.get();
